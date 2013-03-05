@@ -9,6 +9,7 @@
   ([config-file]
      (let [config (utils/load-config config-file)]
        (utils/at-exit (fn []
+                        (shutdown-agents)
                         (println "Shutting down...")))
-       (ui/init-icon (:icon config))
+       (ui/init-tray config)
        (server/start-server (:server config)))))

@@ -1,42 +1,59 @@
 (ns pt-xbot2.ui
-  (:require [clojure.java.io :as io])
+  (:require [clojure.java.io :as io]
+            [clojure.java.browse :as browse])
   (import (java.net URI)
-          (java.awt SystemTray PopupMenu MenuItem TrayIcon Desktop)
+          (java.awt SystemTray PopupMenu MenuItem TrayIcon TrayIcon$MessageType)
           (java.awt.event ActionListener)
           (javax.swing ImageIcon)
           (javax.imageio ImageIO)))
 
 (defn- load-icon [name]
-  (ImageIcon. (ImageIO/read (io/resource name))))
+  (.getImage (ImageIcon. (ImageIO/read (io/resource name)))))
 
-(defn- add-menu-item [menu title action]
-  (let [item (MenuItem. title)]
-    (.addActionListener item
-                        (reify ActionListener
-                          (actionPerformed [this event] (action))))
-    (.add menu item)))
+(defonce tray-icons {:not-configured (load-icon "images/trayNotConfigured.png")
+                 :ready          (load-icon "images/trayReady.png")
+                 :running        (load-icon "images/trayRunning.png")
+                 :error          (load-icon "images/trayError.png")})
 
-(defn init-icon [config]
+(defonce tray-icon (atom nil))
+
+(defn- mk-menu-item [title action]
+  (doto (MenuItem. title)
+    (.addActionListener
+     (reify ActionListener
+       (actionPerformed [this event] (action))))))
+
+(defn- mk-url [config path]
+  (str "http://localhost:" (get-in config [:server :listening-port]) path))
+
+(defn- mk-popup-menu [config]
+  (doto (PopupMenu.)
+    (.add (mk-menu-item "Preferences"
+                        #(browse/browse-url (mk-url config "/pref"))))
+    (.add (mk-menu-item "Log"
+                        #(browse/browse-url (mk-url config "/log"))))
+    (.addSeparator)
+    (.add (mk-menu-item "Exit"
+                        #(System/exit 0)))))
+
+(defn- mk-tray-icon [type title tooltip menu]
+  (doto (TrayIcon. (get tray-icons type) title menu)
+    (.setImageAutoSize true)
+    (.setToolTip tooltip)))
+
+(defn init-tray [config]
   (if (SystemTray/isSupported)
-    (let [icon-not-configured (load-icon "images/trayNotConfigured.png")
-          icon-ready (load-icon "images/trayReady.png")
-          icon-running (load-icon "images/trayRunning.png")
-          icon-error (load-icon "images/trayError.png")
-          popup (PopupMenu.)
-          tray (SystemTray/getSystemTray)
-          tray-icon (TrayIcon. (.getImage icon-not-configured) "Blah blah" popup)]
-      (doto popup
-        (add-menu-item "Preferences"
-                       #(.browse (Desktop/getDesktop)
-                                 (URI. "http://localhost:18080/pref")))
-        (add-menu-item "Log"
-                       #(.browse (Desktop/getDesktop)
-                                 (URI. "http://localhost:18080/log")))
-        (.addSeparator)
-        (add-menu-item "Exit"
-                       #(System/exit 0)))
-      (doto tray-icon
-        (.setImageAutoSize true)
-        (.setToolTip "Blah blah tooltip"))
-      (.add tray tray-icon))
+    (do
+      (swap! tray-icon
+             (fn [_]
+               (mk-tray-icon :not-configured
+                             "PractiTest xBot"
+                             "PractiTest xBot"
+                             (mk-popup-menu config))))
+      (.add (SystemTray/getSystemTray) @tray-icon))
     (println "Tray is NOT supported")))
+
+(defn change-tray-icon [type caption message]
+  (doto @tray-icon
+    (.setImage (get tray-icons type))
+    (.displayMessage caption message TrayIcon$MessageType/INFO)))

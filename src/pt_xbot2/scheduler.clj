@@ -17,10 +17,11 @@
     (copy in bout :encoding "UTF-8")
     (.toString bout)))
 
+;; adopted from
 (defn- exit-code [process timeout]
   (if timeout
     (try
-      (.get (future (.waitFor process)) timeout TimeUnit/MILLISECONDS)
+      (.get (future (.waitFor process)) timeout TimeUnit/SECONDS)
       (catch Exception e
         (if (or (instance? TimeoutException e)
                 (instance? TimeoutException (.getCause e)))
